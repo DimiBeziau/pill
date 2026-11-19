@@ -1,0 +1,63 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model User {
+  id             String             @id @default(cuid())
+  email          String             @unique
+  name           String
+  passwordHash   String
+  createdAt      DateTime           @default(now())
+  // Heure de rappel locale "HH:MM" et fuseau IANA de l'utilisatrice.
+  reminderTime   String             @default("21:00")
+  timezone       String             @default("Europe/Paris")
+  // Délai du bouton « Rappeler plus tard » (minutes).
+  snoozeMinutes  Int                @default(60)
+  // Relance automatique tant que la pilule n'est pas prise (minutes, 0 = désactivée).
+  repeatMinutes  Int                @default(30)
+  subscriptions  PushSubscription[]
+  intakes        Intake[]
+}
+
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+enum IntakeStatus {
+  PENDING
+  TAKEN
+}
+
+// Une ligne par jour local et par utilisatrice. Pas de ligne = jour non suivi (ou oublié si passé).
+model Intake {
+  id             String       @id @default(cuid())
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Jour local "YYYY-MM-DD" dans le fuseau de l'utilisatrice.
+  date           String
+  status         IntakeStatus @default(PENDING)
+  // Instant prévu du rappel ce jour-là (sert à calculer le retard).
+  scheduledAt    DateTime
+  takenAt        DateTime?
+  // Prochain envoi de notification (null = plus aucun envoi prévu).
+  nextReminderAt DateTime?
+  reminderCount  Int          @default(0)
+  snoozeCount    Int          @default(0)
+
+  @@unique([userId, date])
+  @@index([status, nextReminderAt])
+}

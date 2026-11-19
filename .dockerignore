@@ -1,0 +1,12 @@
+node_modules
+.next
+.git
+.env
+.env.*
+data
+*.db
+*.db-journal
+tasks
+tests
+*.log
+.claude

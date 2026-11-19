@@ -1,0 +1,27 @@
+# Prod : pill.beziau.dev, joint par Nginx Proxy Manager via le réseau externe `public`
+# (hôte cible : pill, port 3000). Configurer via `.env` (voir .env.example).
+#
+#   docker compose up -d --build
+services:
+  pill:
+    container_name: pill
+    build: .
+    # Accès direct pour debug (sans proxy) :
+    # ports:
+    #   - "127.0.0.1:3000:3000"
+    environment:
+      DATABASE_URL: "file:/app/data/pill.db"
+      SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET manquant — copier .env.example vers .env et le renseigner}
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:?VAPID_PUBLIC_KEY manquant — npm run vapid}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:?VAPID_PRIVATE_KEY manquant — npm run vapid}
+      VAPID_SUBJECT: ${VAPID_SUBJECT:-mailto:contact@pill.beziau.dev}
+      REGISTRATION_ENABLED: ${REGISTRATION_ENABLED:-true}
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
+    networks:
+      - public
+
+networks:
+  public:
+    external: true

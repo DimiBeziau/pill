@@ -1,0 +1,16 @@
+/node_modules
+/.next/
+/out/
+/coverage
+/app/generated
+/data
+*.db
+*.db-journal
+.env
+.env.*
+!.env.example
+*.tsbuildinfo
+next-env.d.ts
+.DS_Store
+.idea
+.vscode
