@@ -20,6 +20,8 @@ model User {
   snoozeMinutes  Int                @default(60)
   // Relance automatique tant que la pilule n'est pas prise (minutes, 0 = désactivée).
   repeatMinutes  Int                @default(30)
+  // Rappels suspendus jusqu'à cet instant (fin de plaquette). null = actifs.
+  pausedUntil    DateTime?
   subscriptions  PushSubscription[]
   intakes        Intake[]
 }

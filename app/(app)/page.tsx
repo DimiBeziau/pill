@@ -1,3 +1,5 @@
+import { PauseControl } from "@/components/PauseControl";
+import { isPaused } from "@/lib/pause";
 import { PushSetup } from "@/components/PushSetup";
 import { TodayCard } from "@/components/TodayCard";
 import { prisma } from "@/lib/db";
@@ -20,6 +22,7 @@ export default async function TodayPage() {
   const summary = summarize(recent, today, firstDay);
   const scheduledAt = intake?.scheduledAt ?? scheduledInstant(today, user.reminderTime, user.timezone);
   const taken = intake?.status === "TAKEN";
+  const paused = isPaused(user, now);
 
   return (
     <div className="flex flex-col gap-4">
@@ -34,11 +37,19 @@ export default async function TodayPage() {
         scheduledLabel={formatTime(scheduledAt, user.timezone)}
         takenLabel={intake?.takenAt ? formatTime(intake.takenAt, user.timezone) : null}
         nextReminderLabel={
-          intake?.nextReminderAt && intake.nextReminderAt > now
+          !paused && intake?.nextReminderAt && intake.nextReminderAt > now
             ? formatTime(intake.nextReminderAt, user.timezone)
             : null
         }
         snoozeLabel={`dans ${formatDuration(user.snoozeMinutes)}`}
+      />
+
+      <PauseControl
+        resumeLabel={
+          paused && user.pausedUntil
+            ? `le ${formatLongDate(localDate(user.pausedUntil, user.timezone))} à ${formatTime(user.pausedUntil, user.timezone)}`
+            : null
+        }
       />
 
       <PushSetup vapidPublicKey={process.env.VAPID_PUBLIC_KEY ?? ""} compact />

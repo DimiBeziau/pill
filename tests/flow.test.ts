@@ -13,15 +13,18 @@ process.env.DATABASE_URL = `file:${join(dir, "test.db")}`;
 type Db = typeof import("@/lib/db");
 type Intake = typeof import("@/lib/intake");
 type Sched = typeof import("@/lib/scheduler");
+type Pause = typeof import("@/lib/pause");
 let prisma: Db["prisma"];
 let intake: Intake;
 let sched: Sched;
+let pause: Pause;
 
 beforeAll(async () => {
   execSync("npx prisma migrate deploy", { env: process.env, stdio: "ignore" });
   ({ prisma } = await import("@/lib/db"));
   intake = await import("@/lib/intake");
   sched = await import("@/lib/scheduler");
+  pause = await import("@/lib/pause");
 });
 afterAll(async () => {
   await prisma.$disconnect();
@@ -83,6 +86,16 @@ describe("rappels", () => {
     expect(sendToUser).toHaveBeenCalledTimes(1);
     expect(await sched.tick(at("20:05"))).toBe(0);
     expect(sendToUser).toHaveBeenCalledTimes(2);
+  });
+
+  it("la pause de fin de plaquette coupe les notifications 7 jours, puis reprend", async () => {
+    const u = await makeUser();
+    const until = await pause.startPause(u, at("10:00"));
+    expect(until.toISOString()).toBe("2026-11-26T20:00:00.000Z"); // 26/11 21:00 locale
+    expect(await sched.tick(at("20:00"))).toBe(0);
+    expect(await prisma.intake.count({ where: { userId: u.id } })).toBe(0);
+    expect(await sched.tick(new Date("2026-11-25T20:00:00Z"))).toBe(0);
+    expect(await sched.tick(new Date("2026-11-26T20:00:00Z"))).toBe(1);
   });
 
   it("changer l'heure réaligne le rappel du jour", async () => {
