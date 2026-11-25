@@ -8,7 +8,7 @@ import { api } from "@/lib/client";
 export type CalendarDay = {
   date: string;
   day: number;
-  state: "taken" | "late" | "missed" | "pending" | "none";
+  state: "taken" | "late" | "missed" | "pending" | "paused" | "none";
   detail: string;
 };
 
@@ -26,6 +26,7 @@ const STYLE: Record<CalendarDay["state"], string> = {
   late: "bg-warn-bg text-warn font-semibold",
   missed: "bg-bad-bg text-bad font-semibold",
   pending: "border-2 border-brand text-brand font-semibold",
+  paused: "bg-muted/10 text-muted",
   none: "text-muted/50",
 };
 
@@ -69,7 +70,7 @@ export function Calendar({ title, prev, next, cells, today }: Props) {
             c ? (
               <button
                 key={c.date}
-                disabled={c.state === "none"}
+                disabled={c.state === "none" || c.state === "paused"}
                 onClick={() => {
                   setSelected(c.date);
                   setError(null);
@@ -92,9 +93,10 @@ export function Calendar({ title, prev, next, cells, today }: Props) {
         <li>🟩 Prise</li>
         <li>🟨 En retard (&gt; 3 h)</li>
         <li>🟥 Oubliée</li>
+        <li>⬜ Pause</li>
       </ul>
 
-      {day && day.state !== "none" && (
+      {day && day.state !== "none" && day.state !== "paused" && (
         <section className="card flex flex-col gap-3">
           <p className="font-semibold">{day.detail}</p>
           {day.state === "taken" || day.state === "late" ? (

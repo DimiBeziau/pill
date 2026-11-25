@@ -1,5 +1,6 @@
 import { Calendar, type CalendarDay } from "@/components/Calendar";
 import { prisma } from "@/lib/db";
+import { isPausedOn, pausesSince } from "@/lib/pause";
 import { todayFor } from "@/lib/intake";
 import { getCurrentUser } from "@/lib/session";
 import { dayState, delayMinutes, summarize } from "@/lib/stats";
@@ -27,10 +28,12 @@ export default async function HistoryPage({ searchParams }: { searchParams: Prom
   const from = `${month}-01`;
   const to = `${month}-${String(daysInMonth).padStart(2, "0")}`;
 
-  const [records, recent] = await Promise.all([
+  const [records, recent, pauses] = await Promise.all([
     prisma.intake.findMany({ where: { userId: user.id, date: { gte: from, lte: to } } }),
     prisma.intake.findMany({ where: { userId: user.id, date: { gte: addDays(today, -89) } } }),
+    pausesSince(user.id, addDays(today, -89) < from ? addDays(today, -89) : from),
   ]);
+  const inPause = (d: string) => isPausedOn(pauses, d);
   const byDate = new Map(records.map((r) => [r.date, r]));
 
   const lead = (new Date(`${from}T00:00:00Z`).getUTCDay() + 6) % 7; // lundi = 0
@@ -38,19 +41,20 @@ export default async function HistoryPage({ searchParams }: { searchParams: Prom
   for (let d = 1; d <= daysInMonth; d++) {
     const date = `${month}-${String(d).padStart(2, "0")}`;
     const rec = byDate.get(date);
-    const state = dayState(date, rec, today, firstDay);
+    const state = dayState(date, rec, today, firstDay, inPause);
     let detail = formatLongDate(date);
     if (state === "taken" || state === "late") {
       const delay = delayMinutes(rec!) ?? 0;
       detail += ` — prise à ${formatTime(rec!.takenAt!, user.timezone)}`;
       detail += delay > 0 ? ` (+${formatDuration(delay)})` : "";
     } else if (state === "missed") detail += " — oubliée";
+    else if (state === "paused") detail += " — pause (fin de plaquette)";
     else if (state === "pending") detail += " — pas encore prise";
     else detail += " — hors suivi";
     cells.push({ date, day: d, state, detail });
   }
 
-  const s = summarize(recent, today, firstDay, 90);
+  const s = summarize(recent, today, firstDay, 90, inPause);
   const title = new Intl.DateTimeFormat("fr-FR", { timeZone: "UTC", month: "long", year: "numeric" }).format(
     new Date(`${from}T00:00:00Z`),
   );

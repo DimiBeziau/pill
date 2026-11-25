@@ -1,23 +1,45 @@
 import { prisma } from "@/lib/db";
-import { addDays, localDate, scheduledInstant } from "@/lib/time";
+import { addDays, localDate } from "@/lib/time";
 
 /** Durée de la pause de fin de plaquette (jours). */
 export const PAUSE_DAYS = 7;
 
-type PauseUser = { id: string; reminderTime: string; timezone: string };
+export type PauseRange = { startDate: string; endDate: string };
 
-export function isPaused(user: { pausedUntil: Date | null }, now = new Date()): boolean {
-  return !!user.pausedUntil && user.pausedUntil > now;
+/** Vrai si le jour local `date` tombe dans une pause ([startDate, endDate[). */
+export function isPausedOn(periods: PauseRange[], date: string): boolean {
+  return periods.some((p) => p.startDate <= date && date < p.endDate);
 }
 
-/** Suspend les rappels pendant 7 jours : reprise à l'heure de rappel, le 7e jour suivant. */
-export async function startPause(user: PauseUser, now = new Date()): Promise<Date> {
+/** Pauses d'une utilisatrice qui touchent la période commençant à `since` (jour local). */
+export function pausesSince(userId: string, since: string): Promise<PauseRange[]> {
+  return prisma.pausePeriod.findMany({
+    where: { userId, endDate: { gt: since } },
+    select: { startDate: true, endDate: true },
+  });
+}
+
+/** Suspend les rappels 7 jours à partir d'aujourd'hui ; reprise le 7e jour suivant. */
+export async function startPause(
+  user: { id: string; timezone: string },
+  now = new Date(),
+): Promise<PauseRange> {
   const today = localDate(now, user.timezone);
-  const until = scheduledInstant(addDays(today, PAUSE_DAYS), user.reminderTime, user.timezone);
-  await prisma.user.update({ where: { id: user.id }, data: { pausedUntil: until } });
-  return until;
+  const current = (await pausesSince(user.id, today)).find((p) => isPausedOn([p], today));
+  if (current) return current;
+  return prisma.pausePeriod.create({
+    data: { userId: user.id, startDate: today, endDate: addDays(today, PAUSE_DAYS) },
+    select: { startDate: true, endDate: true },
+  });
 }
 
-export async function endPause(userId: string): Promise<void> {
-  await prisma.user.update({ where: { id: userId }, data: { pausedUntil: null } });
+/** Reprend les rappels dès aujourd'hui : la pause en cours est raccourcie (ou supprimée si elle vient de commencer). */
+export async function endPause(user: { id: string; timezone: string }, now = new Date()): Promise<void> {
+  const today = localDate(now, user.timezone);
+  const current = await prisma.pausePeriod.findFirst({
+    where: { userId: user.id, startDate: { lte: today }, endDate: { gt: today } },
+  });
+  if (!current) return;
+  if (current.startDate >= today) await prisma.pausePeriod.delete({ where: { id: current.id } });
+  else await prisma.pausePeriod.update({ where: { id: current.id }, data: { endDate: today } });
 }

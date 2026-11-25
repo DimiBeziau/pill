@@ -90,12 +90,25 @@ describe("rappels", () => {
 
   it("la pause de fin de plaquette coupe les notifications 7 jours, puis reprend", async () => {
     const u = await makeUser();
-    const until = await pause.startPause(u, at("10:00"));
-    expect(until.toISOString()).toBe("2026-11-26T20:00:00.000Z"); // 26/11 21:00 locale
+    const range = await pause.startPause(u, at("10:00"));
+    expect(range).toEqual({ startDate: "2026-11-19", endDate: "2026-11-26" });
     expect(await sched.tick(at("20:00"))).toBe(0);
     expect(await prisma.intake.count({ where: { userId: u.id } })).toBe(0);
     expect(await sched.tick(new Date("2026-11-25T20:00:00Z"))).toBe(0);
     expect(await sched.tick(new Date("2026-11-26T20:00:00Z"))).toBe(1);
+  });
+
+  it("reprendre tôt raccourcit la pause (ou la supprime le jour même)", async () => {
+    const u = await makeUser();
+    await pause.startPause(u, at("10:00"));
+    await pause.endPause(u, at("10:30"));
+    expect(await prisma.pausePeriod.count({ where: { userId: u.id } })).toBe(0);
+    expect(await sched.tick(at("20:00"))).toBe(1);
+
+    await pause.startPause(u, new Date("2026-11-20T10:00:00Z"));
+    await pause.endPause(u, new Date("2026-11-22T10:00:00Z"));
+    const p = await prisma.pausePeriod.findFirstOrThrow({ where: { userId: u.id } });
+    expect(p.endDate).toBe("2026-11-22");
   });
 
   it("changer l'heure réaligne le rappel du jour", async () => {

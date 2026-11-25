@@ -1,5 +1,5 @@
 import { PauseControl } from "@/components/PauseControl";
-import { isPaused } from "@/lib/pause";
+import { isPausedOn, pausesSince } from "@/lib/pause";
 import { PushSetup } from "@/components/PushSetup";
 import { TodayCard } from "@/components/TodayCard";
 import { prisma } from "@/lib/db";
@@ -15,14 +15,17 @@ export default async function TodayPage() {
   const today = todayFor(user, now);
   const firstDay = localDate(user.createdAt, user.timezone);
 
-  const recent = await prisma.intake.findMany({
-    where: { userId: user.id, date: { gte: addDays(today, -60) } },
-  });
+  const [recent, pauses] = await Promise.all([
+    prisma.intake.findMany({ where: { userId: user.id, date: { gte: addDays(today, -60) } } }),
+    pausesSince(user.id, addDays(today, -60)),
+  ]);
+  const inPause = (d: string) => isPausedOn(pauses, d);
   const intake = recent.find((i) => i.date === today);
-  const summary = summarize(recent, today, firstDay);
+  const summary = summarize(recent, today, firstDay, 30, inPause);
   const scheduledAt = intake?.scheduledAt ?? scheduledInstant(today, user.reminderTime, user.timezone);
   const taken = intake?.status === "TAKEN";
-  const paused = isPaused(user, now);
+  const resumeDate = pauses.find((p) => isPausedOn([p], today))?.endDate ?? null;
+  const paused = resumeDate !== null;
 
   return (
     <div className="flex flex-col gap-4">
@@ -46,9 +49,7 @@ export default async function TodayPage() {
 
       <PauseControl
         resumeLabel={
-          paused && user.pausedUntil
-            ? `le ${formatLongDate(localDate(user.pausedUntil, user.timezone))} à ${formatTime(user.pausedUntil, user.timezone)}`
-            : null
+          resumeDate ? `le ${formatLongDate(resumeDate)} à ${user.reminderTime}` : null
         }
       />
 

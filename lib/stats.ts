@@ -10,7 +10,7 @@ export type DayRecord = {
 /** Au-delà de ce retard (minutes) une prise est signalée « en retard » (fenêtre usuelle des pilules : 3 h). */
 export const LATE_AFTER_MINUTES = 180;
 
-export type DayState = "taken" | "late" | "missed" | "pending" | "none";
+export type DayState = "taken" | "late" | "missed" | "pending" | "paused" | "none";
 
 export function delayMinutes(r: DayRecord): number | null {
   if (r.status !== "TAKEN" || !r.takenAt) return null;
@@ -19,6 +19,7 @@ export function delayMinutes(r: DayRecord): number | null {
 
 /**
  * État d'un jour : `none` = hors suivi (futur ou avant l'inscription).
+ * Un jour de pause sans prise est « paused » (ignoré des statistiques).
  * Un jour passé sans prise est « oublié », aujourd'hui sans prise est « en attente ».
  */
 export function dayState(
@@ -26,12 +27,14 @@ export function dayState(
   record: DayRecord | undefined,
   today: string,
   firstDay: string,
+  isPaused: (date: string) => boolean = () => false,
 ): DayState {
   if (date > today || date < firstDay) return "none";
   if (record?.status === "TAKEN") {
     const delay = delayMinutes(record) ?? 0;
     return delay > LATE_AFTER_MINUTES ? "late" : "taken";
   }
+  if (isPaused(date)) return "paused";
   return date === today ? "pending" : "missed";
 }
 
@@ -49,6 +52,7 @@ export function summarize(
   today: string,
   firstDay: string,
   windowDays = 30,
+  isPaused: (date: string) => boolean = () => false,
 ): Summary {
   const byDate = new Map(records.map((r) => [r.date, r]));
   const taken = (d: string) => byDate.get(d)?.status === "TAKEN";
@@ -56,8 +60,9 @@ export function summarize(
   // Série en cours : aujourd'hui compte s'il est pris, sinon on part d'hier (la journée n'est pas finie).
   let cursor = taken(today) ? today : addDays(today, -1);
   let streak = 0;
-  while (cursor >= firstDay && taken(cursor)) {
-    streak += 1;
+  // Les jours de pause sans prise ne cassent pas la série et ne la font pas avancer.
+  while (cursor >= firstDay && (taken(cursor) || isPaused(cursor))) {
+    if (taken(cursor)) streak += 1;
     cursor = addDays(cursor, -1);
   }
 
@@ -70,8 +75,9 @@ export function summarize(
   let takenCount = 0;
   const delays: number[] = [];
   for (let d = from; d <= to; d = addDays(d, 1)) {
-    tracked += 1;
     const rec = byDate.get(d);
+    if (rec?.status !== "TAKEN" && isPaused(d)) continue;
+    tracked += 1;
     if (rec?.status === "TAKEN") {
       takenCount += 1;
       const delay = delayMinutes(rec);

@@ -42,3 +42,20 @@ describe("summarize", () => {
     expect(summarize([], "2026-11-19", "2026-11-19").rate).toBeNull();
   });
 });
+
+describe("jours de pause", () => {
+  const paused = (d: string) => d >= "2026-11-12" && d < "2026-11-19";
+
+  it("un jour de pause sans prise n'est ni oublié ni en attente", () => {
+    expect(dayState("2026-11-15", undefined, "2026-11-25", "2026-11-01", paused)).toBe("paused");
+    expect(dayState("2026-11-15", rec("2026-11-15", 0), "2026-11-25", "2026-11-01", paused)).toBe("taken");
+  });
+
+  it("ne compte pas la pause dans le taux et ne casse pas la série", () => {
+    const records = [rec("2026-11-10", 0), rec("2026-11-11", 0), rec("2026-11-19", 0), rec("2026-11-20", 0)];
+    const s = summarize(records, "2026-11-20", "2026-11-10", 30, paused);
+    expect(s.streak).toBe(4);
+    expect(s.tracked).toBe(4);
+    expect(s.rate).toBe(100);
+  });
+});

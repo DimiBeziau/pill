@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
 import { addMinutes, localDate, scheduledInstant } from "@/lib/time";
+import { isPausedOn, pausesSince } from "@/lib/pause";
 import { isPushConfigured, sendToUser } from "@/lib/push";
 
 /** Nombre maximal de notifications par jour et par utilisatrice (rappel initial + relances). */
@@ -21,16 +22,14 @@ export async function tick(now = new Date()): Promise<number> {
       timezone: true,
       snoozeMinutes: true,
       repeatMinutes: true,
-      pausedUntil: true,
     },
   });
 
   let notified = 0;
   for (const user of users) {
-    // Pause de fin de plaquette : ni entrée du jour, ni notification.
-    if (user.pausedUntil && user.pausedUntil > now) continue;
-
     const date = localDate(now, user.timezone);
+    // Pause de fin de plaquette : ni entrée du jour, ni notification.
+    if (isPausedOn(await pausesSince(user.id, date), date)) continue;
     const scheduledAt = scheduledInstant(date, user.reminderTime, user.timezone);
 
     // Crée l'entrée du jour une fois l'heure atteinte (sans écraser un report ou une prise).

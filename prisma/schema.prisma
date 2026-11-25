@@ -20,9 +20,8 @@ model User {
   snoozeMinutes  Int                @default(60)
   // Relance automatique tant que la pilule n'est pas prise (minutes, 0 = désactivée).
   repeatMinutes  Int                @default(30)
-  // Rappels suspendus jusqu'à cet instant (fin de plaquette). null = actifs.
-  pausedUntil    DateTime?
   subscriptions  PushSubscription[]
+  pauses         PausePeriod[]
   intakes        Intake[]
 }
 
@@ -62,4 +61,16 @@ model Intake {
 
   @@unique([userId, date])
   @@index([status, nextReminderAt])
+}
+
+// Pause de fin de plaquette : jours locaux [startDate, endDate[ sans rappel ni suivi.
+model PausePeriod {
+  id        String @id @default(cuid())
+  userId    String
+  user      User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Jours locaux "YYYY-MM-DD" ; endDate exclu (= jour de reprise des rappels).
+  startDate String
+  endDate   String
+
+  @@index([userId, endDate])
 }
